@@ -92,4 +92,4 @@ ResumePolisher/
 
 ## License
 
-This project was developed as part of the IBM Generative AI Engineering course on Coursera (Course 6: Building Generative AI-Powered Applications with Python).
+This project was developed (and personalized to work locally) as part of the IBM Generative AI Engineering course on Coursera (Course 6: Building Generative AI-Powered Applications with Python).
