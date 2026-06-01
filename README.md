@@ -1,6 +1,6 @@
 # Resume Polisher
 
-AI-powered suite of interactive tools to help job seekers strengthen their application materials. Built with Python, Gradio, and Llama 3.2 via the Hugging Face Inference API.
+AI-powered suite of interactive tools to help job seekers strengthen their application materials. Built with Python, Gradio, and Llama 3.3 via the Hugging Face Inference API.
 
 ## Features
 
@@ -14,7 +14,7 @@ All three tools are available in a single Gradio web app with a tabbed interface
 
 ## Tech Stack
 
-- **LLM:** Meta Llama 3.2 11B Vision Instruct (via Hugging Face Inference API)
+- **LLM:** Meta Llama 3.3 70B Instruct (via Hugging Face Inference API)
 - **UI:** Gradio 5.x
 - **Config:** `python-dotenv` for environment variables
 - **Python:** 3.11+
@@ -23,7 +23,7 @@ All three tools are available in a single Gradio web app with a tabbed interface
 
 - Python 3.11 or higher
 - A Hugging Face account with an API token (sign up at [huggingface.co](https://huggingface.co/))
-- Access to the `meta-llama/Llama-3.2-11B-Vision-Instruct` model on Hugging Face
+- Access to the `meta-llama/Llama-3.3-70B-Instruct` model on Hugging Face
 
 ## Setup
 
