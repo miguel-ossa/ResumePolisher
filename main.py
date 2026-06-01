@@ -21,7 +21,7 @@ load_dotenv(override=True)
 hf_token = os.getenv("HF_TOKEN")
 
 # Shared model and client
-MODEL_ID = "meta-llama/Llama-3.2-11B-Vision-Instruct"
+MODEL_ID = "meta-llama/Llama-3.3-70B-Instruct"
 client = InferenceClient(token=hf_token)
 
 
