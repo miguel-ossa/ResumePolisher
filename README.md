@@ -104,6 +104,10 @@ python main.py
 
 This starts a local web server (default `http://localhost:7860`). Open the URL shown in your browser to access all tools.
 
+## Hugging Face Token
+
+The application now supports providing your own Hugging Face token at execution time through the UI. This feature allows you to use your personal API token instead of relying on a default token, enabling better control over your usage and avoiding potential rate limiting issues.
+
 ## Notes
 
 - The unified `main.py` app shares a single `InferenceClient` across all tabs.

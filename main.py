@@ -42,7 +42,6 @@ def get_hf_client(token=None):
 # Shared model ID
 MODEL_ID = "meta-llama/Llama-3.3-70B-Instruct"
 
-
 # --------------------------------------------------------------------------- #
 #  Resume Polisher                                                            #
 # --------------------------------------------------------------------------- #
@@ -70,7 +69,6 @@ def polish_resume(position_name, resume_content, polish_prompt, hf_api_key):
         max_tokens=2048,
     )
     return response.choices[0].message.content
-
 
 def _resume_polisher_tab():
     with gr.Row():
