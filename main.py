@@ -101,7 +101,7 @@ You are an expert HTML/CSS developer. Generate a clean, professional HTML resume
 
 **LAYOUT**:
 - In the header section, place the exact text `{{{{PHOTO_PLACEHOLDER}}}}` where the profile photo should appear.
-- Use flexbox or grid so that the image sits on the left and the name/title/contact text on the right, aligned vertically.
+- Use flexbox or grid so that the image sits on the left and the name/title/contact text on the right, aligned vertically. Less space between lines.
 - Do NOT write "Profile Photo" as text.
 
 **Other requirements**:

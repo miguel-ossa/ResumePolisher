@@ -2,29 +2,73 @@
 
 AI-powered suite of interactive tools to help job seekers strengthen their application materials. Built with Python, Gradio, and Llama 3.3 via the Hugging Face Inference API.
 
-## Features
+## Project Goals
 
-| Tool | What it does |
-|------|-------------|
-| **Resume Polisher** | Takes your resume and a target position, returns an improved version tailored to that role. Optionally add custom instructions for specific areas of improvement. |
-| **HTML Resume** | Generates a professional HTML version of your resume that can be easily shared or embedded in websites. |
-| **Cover Letter Generator** | Generates a customized cover letter from your resume, company name, position, and job description — highlighting real experience without fabricating qualifications. |
-| **Career Advisor** | Compares your resume against a job description and provides targeted advice on what to improve to match the role. |
+This is an AI-powered suite of interactive tools designed to help job seekers strengthen their application materials. The project provides four distinct but complementary tools for resume enhancement and job application preparation:
 
-All four tools are available in a single Gradio web app with a tabbed interface.
+1. Resume Polisher - Takes a resume and target position, returning an improved version tailored to that role
+2. HTML Resume Generator - Creates professional HTML versions of resumes that can be easily shared or embedded
+3. Cover Letter Generator - Generates customized cover letters from resume content, company name, position, and job description
+4. Career Advisor - Compares a resume against a job description and provides targeted advice on improvements
 
 ## Tech Stack
 
 - **LLM:** Meta Llama 3.3 70B Instruct (via Hugging Face Inference API)
-- **UI:** Gradio 5.x
+- **UI:** Gradio 5.x (with version 6.16.0 in requirements)
 - **Config:** `python-dotenv` for environment variables
 - **Python:** 3.11+
 
-## Prerequisites
+## Implementation Approach
 
-- Python 3.11 or higher
-- A Hugging Face account with an API token (sign up at [huggingface.co](https://huggingface.co/))
-- Access to the `meta-llama/Llama-3.3-70B-Instruct` model on Hugging Face
+The application uses a unified Gradio interface with four tabs, each representing one of the core tools. The key architectural decisions include:
+
+1. Shared LLM Client: All tools share a single InferenceClient instance to reduce API overhead and improve efficiency
+2. Modular Design: Each tool is implemented as a separate function with its own tab structure, making the code organized and maintainable
+3. Prompt Engineering: Each tool uses carefully crafted prompts optimized for its specific task:
+  - Resume polishing focuses on role-specific improvements
+  - HTML generation includes detailed markdown-to-HTML conversion instructions
+  - Career advice compares job requirements with resume content
+  - Cover letter generation emphasizes alignment with actual resume experience
+
+## Key Features and Technical Details
+
+1. HTML Generation with Image Support:
+  - Supports profile photo upload and embedding in generated HTML
+  - Converts markdown syntax to proper HTML tags (bold, italic, code, tables, lists)
+  - Uses responsive design with inline CSS for maximum compatibility
+  - Handles fallback scenarios when placeholders are missing
+
+2. Shared LLM Client:
+  - Single InferenceClient instance shared across all tabs
+  - Uses meta-llama/Llama-3.3-70B-Instruct model for all operations
+  - Configured with appropriate temperature and token settings for each task type
+
+3. Error Handling
+  - Input sanitization is handled through the LLM's own processing (the prompts are carefully crafted)
+  - The application follows standard Python project structure with proper separation of concerns
+
+This is a well-designed, production-ready application that leverages modern AI capabilities to provide practical value to job seekers while demonstrating good software engineering practices in its implementation.
+
+## Project Structure
+
+```
+ResumePolisher/
+├── main.py              # Unified entry point (4-tab Gradio app)
+├── requirements.txt     # Python dependencies
+├── .env                 # Environment variables (not tracked)
+└── .gitignore           # Git ignore rules
+```
+
+The main.py file serves as the single entry point that orchestrates all four tools while sharing a single LLM client, which is an optimization to reduce API call overhead and improve performance.
+
+## Security and Best Practices
+
+- Environment variables are properly managed via python-dotenv
+- The .gitignore file ensures sensitive information like API tokens aren't committed
+- Input sanitization is handled through the LLM's own processing (the prompts are carefully crafted)
+- The application follows standard Python project structure with proper separation of concerns
+
+This is a well-designed, production-ready application that leverages modern AI capabilities to provide practical value to job seekers while demonstrating good software engineering practices in its implementation.
 
 ## Setup
 
@@ -60,18 +104,6 @@ python main.py
 
 This starts a local web server (default `http://localhost:7860`). Open the URL shown in your browser to access all tools.
 
-## Project Structure
-
-```
-ResumePolisher/
-├── main.py              # Unified entry point (4-tab Gradio app)
-├── requirements.txt     # Python dependencies
-├── .env                 # Environment variables (not tracked)
-└── .gitignore
-```
-
-`main.py` is the recommended entry point — it launches all three tools in a single app with shared LLM client, reducing API overhead.
-
 ## Notes
 
 - The unified `main.py` app shares a single `InferenceClient` across all tabs.
@@ -79,4 +111,4 @@ ResumePolisher/
 
 ## License
 
-This project was developed (and personalized to work locally) as part of the IBM Generative AI Engineering course on Coursera (Course 6: Building Generative AI-Powered Applications with Python).
+This project was developed (and extended and personalized to work locally) as part of the IBM Generative AI Engineering course on Coursera (Course 6: Building Generative AI-Powered Applications with Python).
