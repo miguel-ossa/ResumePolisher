@@ -22,17 +22,31 @@ import gradio as gr
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
-hf_token = os.getenv("HF_TOKEN")
 
-# Shared model and client
+# Configuration flag - if True, use HF_TOKEN from .env; if False, use API key from UI field
+USE_ENV_TOKEN = True
+
+def get_hf_client(token=None):
+    """Get InferenceClient instance with the appropriate token."""
+    if token is not None:
+        # Use provided token (from UI input)
+        return InferenceClient(token=token)
+    elif USE_ENV_TOKEN:
+        # Use HF_TOKEN from .env file
+        hf_token = os.getenv("HF_TOKEN")
+        return InferenceClient(token=hf_token)
+    else:
+        # No token provided and not using env - this will cause an error
+        raise ValueError("No Hugging Face token available. Please provide a token via environment variable or UI.")
+
+# Shared model ID
 MODEL_ID = "meta-llama/Llama-3.3-70B-Instruct"
-client = InferenceClient(token=hf_token)
 
 
 # --------------------------------------------------------------------------- #
 #  Resume Polisher                                                            #
 # --------------------------------------------------------------------------- #
-def polish_resume(position_name, resume_content, polish_prompt):
+def polish_resume(position_name, resume_content, polish_prompt, hf_api_key):
     if polish_prompt and polish_prompt.strip():
         prompt = (
             f"Given the resume content: '{resume_content}', polish it based on "
@@ -45,6 +59,9 @@ def polish_resume(position_name, resume_content, polish_prompt):
             f"position. Return the polished version, highlighting necessary adjustments for "
             f"clarity, relevance, and impact in relation to the targeted role."
         )
+
+    # Get client with appropriate token
+    client = get_hf_client(hf_api_key)
 
     response = client.chat_completion(
         model=MODEL_ID,
@@ -62,14 +79,16 @@ def _resume_polisher_tab():
         resume = gr.Textbox(label="Resume Content", placeholder="Paste your resume content here...", lines=15)
     with gr.Row():
         instructions = gr.Textbox(label="Polish Instructions (Optional)", placeholder="Enter specific areas for improvement...", lines=2)
+    with gr.Row():
+        hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)", placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.Textbox(label="Polished Resume")
     btn = gr.Button("Polish Resume", variant="primary")
-    btn.click(fn=polish_resume, inputs=[position, resume, instructions], outputs=output)
+    btn.click(fn=polish_resume, inputs=[position, resume, instructions, hf_api_key], outputs=output)
 
 # --------------------------------------------------------------------------- #
 #  Html Generation                                                            #
 # --------------------------------------------------------------------------- #
-def generate_html(photo, resume):
+def generate_html(photo, resume, hf_api_key):
     print("=== generate_html started ===")
 
     # Convert photo to base64
@@ -116,6 +135,9 @@ Resume content:
 Now generate the HTML.
 """
     print("Calling LLM...")
+    # Get client with appropriate token
+    client = get_hf_client(hf_api_key)
+
     response = client.chat_completion(
         model=MODEL_ID,
         messages=[{"role": "user", "content": prompt}],
@@ -171,20 +193,26 @@ def _generate_html_tab():
         photo = gr.Image(label="Profile Photo", type="filepath", height=200)
     with gr.Row():
         resume = gr.Textbox(label="Resume Content", placeholder="Paste your resume content here...", lines=15)
+        with gr.Row():
+            hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)",
+                                    placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.File(label="Download HTML Resume")   # No visible=False – always visible but empty until generation
     btn = gr.Button("Generate HTML", variant="primary")
-    btn.click(fn=generate_html, inputs=[photo, resume], outputs=output)
+    btn.click(fn=generate_html, inputs=[photo, resume, hf_api_key], outputs=output)
 
 # --------------------------------------------------------------------------- #
 #  Career Advisor                                                             #
 # --------------------------------------------------------------------------- #
-def get_career_advice(position, job_desc, resume_content):
+def get_career_advice(position, job_desc, resume_content, hf_api_key):
     prompt = (
         f"Considering the job description: {job_desc}, and the resume provided: "
         f"{resume_content}, identify areas for enhancement in the resume. Offer specific "
         f"suggestions on how to improve these aspects to better match the job requirements "
         f"and increase the likelihood of being selected for the position of {position}."
     )
+
+    # Get client with appropriate token
+    client = get_hf_client(hf_api_key)
 
     response = client.chat_completion(
         model=MODEL_ID,
@@ -201,14 +229,16 @@ def _career_advisor_tab():
         job_desc = gr.Textbox(label="Job Description", placeholder="Paste the job description here...", lines=10)
     with gr.Row():
         resume = gr.Textbox(label="Your Resume Content", placeholder="Paste your resume content here...", lines=10)
+    with gr.Row():
+        hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)", placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.Textbox(label="Career Advice")
     btn = gr.Button("Get Advice", variant="primary")
-    btn.click(fn=get_career_advice, inputs=[position, job_desc, resume], outputs=output)
+    btn.click(fn=get_career_advice, inputs=[position, job_desc, resume, hf_api_key], outputs=output)
 
 # --------------------------------------------------------------------------- #
 #  Cover Letter Generator                                                     #
 # --------------------------------------------------------------------------- #
-def generate_cover_letter(company, position, job_desc, resume_content):
+def generate_cover_letter(company, position, job_desc, resume_content, hf_api_key):
     prompt = (
         f"Generate a customized cover letter using the company name: {company}, "
         f"the position applied for: {position}, and the job description: {job_desc}. "
@@ -217,6 +247,9 @@ def generate_cover_letter(company, position, job_desc, resume_content):
         f"including experiences not present in my resume but mentioned in the job description. "
         f"The goal is to emphasize the alignment between my existing skills and the requirements of the role."
     )
+
+    # Get client with appropriate token
+    client = get_hf_client(hf_api_key)
 
     response = client.chat_completion(
         model=MODEL_ID,
@@ -234,9 +267,11 @@ def _cover_letter_tab():
         job_desc = gr.Textbox(label="Job Description", placeholder="Paste the job description here...", lines=10)
     with gr.Row():
         resume = gr.Textbox(label="Resume Content", placeholder="Paste your resume content here...", lines=10)
+    with gr.Row():
+        hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)", placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.Textbox(label="Customized Cover Letter")
     btn = gr.Button("Generate Cover Letter", variant="primary")
-    btn.click(fn=generate_cover_letter, inputs=[company, position, job_desc, resume], outputs=output)
+    btn.click(fn=generate_cover_letter, inputs=[company, position, job_desc, resume, hf_api_key], outputs=output)
 
 # --------------------------------------------------------------------------- #
 #  App                                                                        #
