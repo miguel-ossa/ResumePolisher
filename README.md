@@ -10,6 +10,7 @@ This is an AI-powered suite of interactive tools designed to help job seekers st
 2. HTML Resume Generator - Creates professional HTML versions of resumes that can be easily shared or embedded
 3. Cover Letter Generator - Generates customized cover letters from resume content, company name, position, and job description
 4. Career Advisor - Compares a resume against a job description and provides targeted advice on improvements
+5. Settings - Allows entering your own Hugging Face API Key
 
 ## Tech Stack
 

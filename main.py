@@ -1,18 +1,3 @@
-"""Unified entry point for the Resume Polisher suite.
-
-Launches a single Gradio app with four tabs:
-  - Resume Polisher
-  - Career Advisor
-  - Cover Letter Generator
-  - HTML Resume
-
-Each tab reuses the logic from its respective module while sharing
-a single Hugging Face InferenceClient instance.
-
-Usage:
-    python main.py
-"""
-
 import os
 import re
 import base64
@@ -24,28 +9,32 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Configuration flag - if True, use HF_TOKEN from .env; if False, use API key from UI field
-USE_ENV_TOKEN = True
+USE_ENV_TOKEN = False
+# Shared model ID
+MODEL_ID = "meta-llama/Llama-3.3-70B-Instruct"
+
+
+def get_error_html(message):
+    return f"<div style='color: #d9534f; background-color: #f2dede; padding: 10px; border-radius: 5px; border: 1px solid #ebccd1;'>{message}</div>"
 
 def get_hf_client(token=None):
     """Get InferenceClient instance with the appropriate token."""
-    if token is not None:
+    if token:
         # Use provided token (from UI input)
+        print("Using Hugging Face token:", token)
         return InferenceClient(token=token)
     elif USE_ENV_TOKEN:
         # Use HF_TOKEN from .env file
+        print("Using Hugging Face token from env.")
         hf_token = os.getenv("HF_TOKEN")
         return InferenceClient(token=hf_token)
     else:
-        # No token provided and not using env - this will cause an error
         raise ValueError("No Hugging Face token available. Please provide a token via environment variable or UI.")
-
-# Shared model ID
-MODEL_ID = "meta-llama/Llama-3.3-70B-Instruct"
 
 # --------------------------------------------------------------------------- #
 #  Resume Polisher                                                            #
 # --------------------------------------------------------------------------- #
-def polish_resume(position_name, resume_content, polish_prompt, hf_api_key):
+def polish_resume(position_name, resume_content, polish_prompt, api_key):
     if polish_prompt and polish_prompt.strip():
         prompt = (
             f"Given the resume content: '{resume_content}', polish it based on "
@@ -59,149 +48,131 @@ def polish_resume(position_name, resume_content, polish_prompt, hf_api_key):
             f"clarity, relevance, and impact in relation to the targeted role."
         )
 
-    # Get client with appropriate token
-    client = get_hf_client(hf_api_key)
+    client = get_hf_client(api_key)
 
-    response = client.chat_completion(
-        model=MODEL_ID,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
-        max_tokens=2048,
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat_completion(
+            model=MODEL_ID,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=2048,
+        )
+        return response.choices[0].message.content, ""
+    except Exception as e:
+        return "", f"⚠️ Error: {str(e)}. Please check your Hugging Face API key in the Settings tab."
 
-def _resume_polisher_tab():
+def _resume_polisher_tab(api_key_state):
     with gr.Row():
         position = gr.Textbox(label="Position Name", placeholder="Enter the name of the position...")
     with gr.Row():
         resume = gr.Textbox(label="Resume Content", placeholder="Paste your resume content here...", lines=15)
     with gr.Row():
         instructions = gr.Textbox(label="Polish Instructions (Optional)", placeholder="Enter specific areas for improvement...", lines=2)
-    with gr.Row():
-        hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)", placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.Textbox(label="Polished Resume")
+    error_display = gr.HTML(visible=False)
     btn = gr.Button("Polish Resume", variant="primary")
-    btn.click(fn=polish_resume, inputs=[position, resume, instructions, hf_api_key], outputs=output)
+
+    def handle_click(pos, res, ins, key):
+        res_text, err = polish_resume(pos, res, ins, key)
+        if err:
+            print("Error:", err)
+            return "", gr.update(value=get_error_html(err), visible=True)
+        return res_text, gr.update(visible=False)
+
+    # Pass api_key_state as an input to the function
+    btn.click(fn=handle_click, inputs=[position, resume, instructions, api_key_state], outputs=[output, error_display])
 
 # --------------------------------------------------------------------------- #
 #  Html Generation                                                            #
 # --------------------------------------------------------------------------- #
-def generate_html(photo, resume, hf_api_key):
-    print("=== generate_html started ===")
+def generate_html(photo, resume, api_key):
+    """
+    Returns a tuple: (file_path_or_None, error_message)
+    """
+    try:
+        # 1. Convert photo to base64
+        photo_html = ""
+        if photo:
+            try:
+                with open(photo, "rb") as img_file:
+                    img_data = base64.b64encode(img_file.read()).decode("utf-8")
+                    mime = "image/png" if photo.lower().endswith(('.png')) else "image/jpeg"
+                    photo_data_url = f"data:{mime};base64,{img_data}"
+                    photo_html = f'<img src="{photo_data_url}" alt="Profile Photo" style="width: 130px; height: 130px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">'
+            except Exception as e:
+                return None, f"⚠️ Error processing photo: {str(e)}"
 
-    # Convert photo to base64
-    photo_html = ""
-    if photo:
-        try:
-            with open(photo, "rb") as img_file:
-                img_data = base64.b64encode(img_file.read()).decode("utf-8")
-                if photo.lower().endswith(('.png')):
-                    mime = "image/png"
-                elif photo.lower().endswith(('.jpg', '.jpeg')):
-                    mime = "image/jpeg"
-                else:
-                    mime = "image/png"
-                photo_data_url = f"data:{mime};base64,{img_data}"
-                photo_html = f'<img src="{photo_data_url}" alt="Profile Photo" style="width: 130px; height: 130px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">'
-                print("Photo converted to base64")
-        except Exception as e:
-            print(f"Error: {e}")
-
-    # Prompt with placeholder and markdown-to-HTML instruction
-    prompt = f"""
+        # 2. Prepare Prompt
+        prompt = f"""
 You are an expert HTML/CSS developer. Generate a clean, professional HTML resume.
-
-**CRITICAL – MARKDOWN CONVERSION**:
-- The resume content may contain markdown syntax (e.g., **bold**, *italic*, `code`, tables, lists).
-- You MUST convert all markdown into proper HTML tags: <strong> for **bold**, <em> for *italic*, <code> for `code`, <table> for markdown tables, <ul>/<li> for lists, etc.
-- Do NOT output raw markdown characters like **, *, |, ---, etc.
-
-**LAYOUT**:
-- In the header section, place the exact text `{{{{PHOTO_PLACEHOLDER}}}}` where the profile photo should appear.
-- Use flexbox or grid so that the image sits on the left and the name/title/contact text on the right, aligned vertically. Less space between lines.
-- Do NOT write "Profile Photo" as text.
-
-**Other requirements**:
-1. Modern HTML5, inline CSS, responsive (max-width 900px, centered).
-2. No external files or scripts.
-3. Preserve all sections from the resume.
-4. Return ONLY raw HTML starting with <!DOCTYPE html>. No markdown code fences.
+**CRITICAL – MARKDOWN CONVERSION**: Convert all markdown into proper HTML tags (<strong>, <em>, <ul>, etc.).
+**LAYOUT**: Place the exact text `{{{{PHOTO_PLACEHOLDER}}}}` where the profile photo should appear.
+Return ONLY raw HTML starting with <!DOCTYPE html>. No markdown code fences.
 
 Resume content:
 {resume}
-
-Now generate the HTML.
 """
-    print("Calling LLM...")
-    # Get client with appropriate token
-    client = get_hf_client(hf_api_key)
+        # 3. Call API
+        client = get_hf_client(api_key)
+        response = client.chat_completion(
+            model=MODEL_ID,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=4096,
+        )
+        html = response.choices[0].message.content
 
-    response = client.chat_completion(
-        model=MODEL_ID,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=4096,
-    )
-    html = response.choices[0].message.content
-    # Remove markdown code fences
-    html = re.sub(r"^```html?\s*", "", html, flags=re.MULTILINE)
-    html = re.sub(r"\s*```\s*$", "", html, flags=re.MULTILINE)
+        # 4. Cleanup and Process
+        html = re.sub(r"^```html?\s*", "", html, flags=re.MULTILINE)
+        html = re.sub(r"\s*```\s*$", "", html, flags=re.MULTILINE)
+        html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+        html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html)
+        html = re.sub(r'`(.+?)`', r'<code>\1</code>', html)
 
-    # -------------------------------------------------------------------
-    # POST-PROCESS: catch any leftover markdown patterns
-    # -------------------------------------------------------------------
-    # Convert **bold** to <strong>
-    html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
-    # Convert *italic* to <em> (but not inside existing tags)
-    html = re.sub(r'(?<![> ])\*(.+?)\*(?![< ])', r'<em>\1</em>', html)
-    # Convert `code` to <code>
-    html = re.sub(r'`(.+?)`', r'<code>\1</code>', html)
-    # Convert markdown links [text](url) to <a>
-    html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
-
-    # Replace placeholder with actual image HTML
-    if photo_html:
-        if "{{PHOTO_PLACEHOLDER}}" in html:
+        if photo_html and "{{PHOTO_PLACEHOLDER}}" in html:
             html = html.replace("{{PHOTO_PLACEHOLDER}}", photo_html)
-            print("Placeholder replaced")
-        else:
-            # Fallback: inject floated image after <body>
-            print("Placeholder missing – injecting floated image")
-            body_match = re.search(r"<body[^>]*>", html, re.IGNORECASE)
-            if body_match:
-                pos = body_match.end()
-                inject = f'<div style="float: left; margin: 0 25px 15px 0;">{photo_html}</div><div style="clear: both;"></div>'
-                html = html[:pos] + inject + html[pos:]
-            else:
-                html = f'<div style="float: left; margin-right: 20px;">{photo_html}</div>' + html
 
-    # Remove any leftover "Profile Photo" text
-    html = re.sub(r'(?i)Profile Photo', '', html)
+        # 5. Save File
+        fd, path = tempfile.mkstemp(suffix=".html", text=True)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(html)
 
-    # Save HTML
-    fd, path = tempfile.mkstemp(suffix=".html", text=True)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"HTML saved at: {path}")
+        # SUCCESS: Return the path and an empty error string
+        return path, ""
 
-    return gr.update(visible=True, value=path)
+    except Exception as e:
+        # FAILURE: Return None for the file and the error message
+        return None, f"⚠️ Error: {str(e)}. Please check your Hugging Face API key in the Settings tab."
 
-def _generate_html_tab():
+def _generate_html_tab(api_key_state):
     with gr.Row():
         photo = gr.Image(label="Profile Photo", type="filepath", height=200)
     with gr.Row():
         resume = gr.Textbox(label="Resume Content", placeholder="Paste your resume content here...", lines=15)
-        with gr.Row():
-            hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)",
-                                    placeholder="Enter your Hugging Face API key here...", type="password")
-    output = gr.File(label="Download HTML Resume")   # No visible=False – always visible but empty until generation
+
+    # UI Components
+    output_file = gr.File(label="Download HTML Resume")
+    error_display = gr.HTML(visible=False)
     btn = gr.Button("Generate HTML", variant="primary")
-    btn.click(fn=generate_html, inputs=[photo, resume, hf_api_key], outputs=output)
+
+    def handle_click(photo, resume, key):
+        path, err = generate_html(photo, resume, key)
+        if err:
+            print("Error:", err)
+            return gr.update(value=None, visible=False), gr.update(value=get_error_html(err), visible=True)
+        else:
+            return gr.update(value=path, visible=True), gr.update(visible=False)
+
+    btn.click(
+        fn=handle_click,
+        inputs=[photo, resume, api_key_state],
+        outputs=[output_file, error_display]
+    )
 
 # --------------------------------------------------------------------------- #
 #  Career Advisor                                                             #
 # --------------------------------------------------------------------------- #
-def get_career_advice(position, job_desc, resume_content, hf_api_key):
+def get_career_advice(position, job_desc, resume_content, api_key):
     prompt = (
         f"Considering the job description: {job_desc}, and the resume provided: "
         f"{resume_content}, identify areas for enhancement in the resume. Offer specific "
@@ -209,55 +180,64 @@ def get_career_advice(position, job_desc, resume_content, hf_api_key):
         f"and increase the likelihood of being selected for the position of {position}."
     )
 
-    # Get client with appropriate token
-    client = get_hf_client(hf_api_key)
+    client = get_hf_client(api_key)
 
-    response = client.chat_completion(
-        model=MODEL_ID,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
-        max_tokens=1024,
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat_completion(
+            model=MODEL_ID,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content, ""
+    except Exception as e:
+        return "", f"⚠️ Error: {str(e)}. Please check your Hugging Face API key in the Settings tab."
 
-def _career_advisor_tab():
+def _career_advisor_tab(api_key_state):
     with gr.Row():
         position = gr.Textbox(label="Position Applied For", placeholder="Enter the position you are applying for...")
     with gr.Row():
         job_desc = gr.Textbox(label="Job Description", placeholder="Paste the job description here...", lines=10)
     with gr.Row():
         resume = gr.Textbox(label="Your Resume Content", placeholder="Paste your resume content here...", lines=10)
-    with gr.Row():
-        hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)", placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.Textbox(label="Career Advice")
+    error_display = gr.HTML(visible=False)
     btn = gr.Button("Get Advice", variant="primary")
-    btn.click(fn=get_career_advice, inputs=[position, job_desc, resume, hf_api_key], outputs=output)
+
+    def handle_click(pos, desc, res, key):
+        advice, err = get_career_advice(pos, desc, res, key)
+        if err:
+            print("Error:", err)
+            return "", gr.update(value=get_error_html(err), visible=True)
+        return advice, gr.update(visible=False)
+
+    btn.click(fn=handle_click, inputs=[position, job_desc, resume, api_key_state], outputs=[output, error_display])
 
 # --------------------------------------------------------------------------- #
 #  Cover Letter Generator                                                     #
 # --------------------------------------------------------------------------- #
-def generate_cover_letter(company, position, job_desc, resume_content, hf_api_key):
+def generate_cover_letter(company, position, job_desc, resume_content, api_key):
     prompt = (
         f"Generate a customized cover letter using the company name: {company}, "
         f"the position applied for: {position}, and the job description: {job_desc}. "
         f"Ensure the cover letter highlights my qualifications and experience as detailed "
-        f"in the resume content: {resume_content}. Adapt the content carefully to avoid "
-        f"including experiences not present in my resume but mentioned in the job description. "
-        f"The goal is to emphasize the alignment between my existing skills and the requirements of the role."
+        f"in the resume content: {resume_content}."
     )
 
-    # Get client with appropriate token
-    client = get_hf_client(hf_api_key)
+    client = get_hf_client(api_key)
 
-    response = client.chat_completion(
-        model=MODEL_ID,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
-        max_tokens=2048,
-    )
-    return response.choices[0].message.content
+    try:
+        response = client.chat_completion(
+            model=MODEL_ID,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=2048,
+        )
+        return response.choices[0].message.content, ""
+    except Exception as e:
+        return "", f"⚠️ Error: {str(e)}. Please check your Hugging Face API key in the Settings tab."
 
-def _cover_letter_tab():
+def _cover_letter_tab(api_key_state):
     with gr.Row():
         company = gr.Textbox(label="Company Name", placeholder="Enter the name of the company...")
         position = gr.Textbox(label="Position Name", placeholder="Enter the name of the position...")
@@ -265,32 +245,66 @@ def _cover_letter_tab():
         job_desc = gr.Textbox(label="Job Description", placeholder="Paste the job description here...", lines=10)
     with gr.Row():
         resume = gr.Textbox(label="Resume Content", placeholder="Paste your resume content here...", lines=10)
-    with gr.Row():
-        hf_api_key = gr.Textbox(label="Hugging Face API Key (if not using .env)", placeholder="Enter your Hugging Face API key here...", type="password")
     output = gr.Textbox(label="Customized Cover Letter")
+    error_display = gr.HTML(visible=False)
     btn = gr.Button("Generate Cover Letter", variant="primary")
-    btn.click(fn=generate_cover_letter, inputs=[company, position, job_desc, resume, hf_api_key], outputs=output)
+
+    def handle_click(comp, pos, desc, res, key):
+        letter, err = generate_cover_letter(comp, pos, desc, res, key)
+        if err:
+            print("Error:", err)
+            return "", gr.update(value=get_error_html(err), visible=True)
+        return letter, gr.update(visible=False)
+
+    btn.click(fn=handle_click, inputs=[company, position, job_desc, resume, api_key_state],
+              outputs=[output, error_display])
+
+# --------------------------------------------------------------------------- #
+#  Settings                                                                   #
+# --------------------------------------------------------------------------- #
+def update_api_key(new_key, current_state):
+    # Update the state with the new key
+    return new_key
+
+def _settings_tab(api_key_state):
+    with gr.Row():
+        input_key = gr.Textbox(label="Hugging Face API Key", placeholder="Enter your Hugging Face API key here...", type="password")
+
+    btn = gr.Button("Update API Key", variant="primary")
+
+    # When button is clicked, update the state variable
+    btn.click(fn=update_api_key, inputs=[input_key, api_key_state], outputs=api_key_state)
+    gr.Markdown("Click 'Update API Key' to apply the new key to your current session.")
 
 # --------------------------------------------------------------------------- #
 #  App                                                                        #
 # --------------------------------------------------------------------------- #
 with gr.Blocks(title="Resume Polisher Suite") as app:
+    # Initialize the session state with the environment variable (if available)
+    if USE_ENV_TOKEN:
+        api_key_state = gr.State(value=os.getenv("HF_TOKEN"))
+    else:
+        api_key_state = gr.State(value="dummy")
+
     gr.Markdown("# Resume Polisher Suite\nAI-powered tools to strengthen your job application materials.")
 
     with gr.Tabs():
         with gr.Tab("Resume Polisher"):
-            gr.Markdown("Polish your resume for a specific role. Optionally add custom instructions.")
-            _resume_polisher_tab()
+            gr.Markdown("Polish your resume for a specific role.")
+            _resume_polisher_tab(api_key_state)
         with gr.Tab("HTML Resume"):
             gr.Markdown("Upload a photo and paste your resume to generate a downloadable HTML file.")
-            _generate_html_tab()
+            _generate_html_tab(api_key_state)
         with gr.Tab("Cover Letter"):
             gr.Markdown("Generate a tailored cover letter from your resume and the job posting.")
-            _cover_letter_tab()
+            _cover_letter_tab(api_key_state)
         with gr.Tab("Career Advisor"):
             gr.Markdown("Get targeted advice by comparing your resume against a job description.")
-            _career_advisor_tab()
+            _career_advisor_tab(api_key_state)
+        with gr.Tab("Settings"):
+            gr.Markdown("Adjust your settings.")
+            _settings_tab(api_key_state)
 
-    gr.Markdown("---\n*Powered by Llama 3.2 · Built with Gradio & Hugging Face Inference API*")
+    gr.Markdown("---\n*Powered by Llama 3.3 · Built with Gradio & Hugging Face Inference API*")
 
 app.launch(share=True)
