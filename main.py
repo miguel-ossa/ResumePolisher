@@ -8,10 +8,11 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+# Import model configuration
+from config import MODEL_ID
+
 # Configuration flag - if True, use HF_TOKEN from .env; if False, use API key from UI field
-USE_ENV_TOKEN = False
-# Shared model ID
-MODEL_ID = "meta-llama/Llama-3.3-70B-Instruct"
+USE_ENV_TOKEN = True
 
 
 def get_error_html(message):
