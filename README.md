@@ -55,10 +55,16 @@ This is a well-designed, production-ready application that leverages modern AI c
 ```
 ResumePolisher/
 ├── main.py              # Unified entry point (4-tab Gradio app)
+├── config.py            # Centralized configuration
 ├── requirements.txt     # Python dependencies
 ├── .env                 # Environment variables (not tracked)
-└── .gitignore           # Git ignore rules
+├── .gitignore           # Git ignore rules
+└── CLAUDE.md            # Architecture guide for Claude Code
 ```
+
+## Claude Code Architecture
+
+See `CLAUDE.md` for detailed architectural guidance on how this codebase is structured, including the shared LLM client pattern, component design, and configuration management.
 
 The main.py file serves as the single entry point that orchestrates all four tools while sharing a single LLM client, which is an optimization to reduce API call overhead and improve performance.
 
